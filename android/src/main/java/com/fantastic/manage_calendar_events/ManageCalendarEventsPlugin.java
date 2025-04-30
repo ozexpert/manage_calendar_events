@@ -10,6 +10,7 @@ import com.fantastic.manage_calendar_events.models.Calendar;
 import com.fantastic.manage_calendar_events.models.CalendarEvent;
 import com.google.gson.Gson;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,6 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
 
 /**
  * ManageCalendarEventsPlugin
@@ -38,6 +38,10 @@ public class ManageCalendarEventsPlugin implements FlutterPlugin, ActivityAware,
     private Activity activity;
     private CalendarOperations operations;
 
+    // Constructor used by v1 embedding
+    public ManageCalendarEventsPlugin() {
+    }
+
     private static void setup(ManageCalendarEventsPlugin plugin, BinaryMessenger binaryMessenger,
                               Activity activity, Context context) {
         plugin.binaryMessenger = binaryMessenger;
@@ -49,27 +53,47 @@ public class ManageCalendarEventsPlugin implements FlutterPlugin, ActivityAware,
         plugin.methodChannel.setMethodCallHandler(plugin);
     }
 
+    /**
+     * Plugin registration for compatibility with older Flutter versions.
+     * This is a compatibility method for older Flutter versions that don't use the v2 embedding.
+     */
+    @SuppressWarnings("deprecation")
+    public static void registerWith(Object registrarInstance) {
+        try {
+            // Using reflection to avoid direct reference to the deprecated Registrar class
+            Class<?> registrarClass = registrarInstance.getClass();
+            
+            // Get required objects from registrar
+            Method messengerMethod = registrarClass.getMethod("messenger");
+            Method activityMethod = registrarClass.getMethod("activity");
+            Method contextMethod = registrarClass.getMethod("context");
+            
+            BinaryMessenger messenger = (BinaryMessenger) messengerMethod.invoke(registrarInstance);
+            Activity activity = (Activity) activityMethod.invoke(registrarInstance);
+            Context context = (Context) contextMethod.invoke(registrarInstance);
+            
+            // Setup the plugin
+            ManageCalendarEventsPlugin plugin = new ManageCalendarEventsPlugin();
+            setup(plugin, messenger, activity, context);
+        } catch (Exception e) {
+            Log.e("ManageCalendarEvents", "Error registering plugin", e);
+        }
+    }
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
         Log.d("DART/NATIVE", "onAttachedToEngine");
-        binaryMessenger= flutterPluginBinding.getBinaryMessenger();
+        binaryMessenger = flutterPluginBinding.getBinaryMessenger();
         context = flutterPluginBinding.getApplicationContext();
     }
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
         Log.d("DART/NATIVE", "onDetachedFromEngine");
-        methodChannel.setMethodCallHandler(null);
-    }
-
-    /**
-     * Plugin registration.
-     */
-    public static void registerWith(Registrar registrar) {
-        Context context = registrar.context();
-        Activity activity = registrar.activity();
-        setup(new ManageCalendarEventsPlugin(), registrar.messenger(), activity, context);
+        if (methodChannel != null) {
+            methodChannel.setMethodCallHandler(null);
+            methodChannel = null;
+        }
     }
 
 
